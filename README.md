@@ -1,6 +1,13 @@
 
 # ComfyUI Qwen2-VL wrapper
 
+## Sample workflow
+You can find a sample workflow here [Qwen2VL.json](Qwen2VL.json).
+
+![alt text](comfy_workflow.png)
+
+
+
 ## Installation
 
 To install ComfyUI_QwenVL in `ComfyUI\custom_nodes\`, follow these steps:
@@ -19,3 +26,6 @@ To install ComfyUI_QwenVL in `ComfyUI\custom_nodes\`, follow these steps:
     ```bash
     pip install -r requirements.txt
     ```
+
+## Qwen2-VL models location
+Models will be downloaded to `ComfyUI\models\LLM\`

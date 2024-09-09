@@ -1,0 +1,162 @@
+{
+  "last_node_id": 3,
+  "last_link_id": 2,
+  "nodes": [
+    {
+      "id": 3,
+      "type": "ShowText|pysssss",
+      "pos": {
+        "0": 3000.51416015625,
+        "1": 1133.0140380859375
+      },
+      "size": [
+        360,
+        270
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "link": 2,
+          "widget": {
+            "name": "text"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": null,
+          "shape": 6
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ShowText|pysssss"
+      },
+      "widgets_values": [
+        "",
+        "The image depicts a person sitting at a vanity table, engaged in the act of painting or applying makeup. The individual is wearing a traditional teal-colored robe with white floral patterns, and their hair is styled in an intricate updo adorned with decorative hairpins. The vanity table is illuminated by a soft, warm light, casting gentle shadows and highlighting the person's focused expression. On the table, there is a wooden box, possibly containing makeup or art supplies, and various brushes are visible. The overall atmosphere of the image is serene and contemplative, with a strong emphasis on the act of creation and self-expression."
+      ]
+    },
+    {
+      "id": 2,
+      "type": "Qwen2VL",
+      "pos": {
+        "0": 2540,
+        "1": 1120
+      },
+      "size": {
+        "0": 400,
+        "1": 244
+      },
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            2
+          ],
+          "shape": 3,
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "Qwen2VL"
+      },
+      "widgets_values": [
+        "Describe this image",
+        "Qwen2-VL-7B-Instruct",
+        "none",
+        false,
+        0.7,
+        512,
+        693,
+        "randomize"
+      ]
+    },
+    {
+      "id": 1,
+      "type": "LoadImage",
+      "pos": {
+        "0": 2010,
+        "1": 1120
+      },
+      "size": [
+        420,
+        460
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            1
+          ],
+          "shape": 3,
+          "slot_index": 0
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null,
+          "shape": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "img.png",
+        "image"
+      ]
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "IMAGE"
+    ],
+    [
+      2,
+      2,
+      0,
+      3,
+      0,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.6830134553650711,
+      "offset": [
+        -1308.746708001159,
+        -677.678903655489
+      ]
+    }
+  },
+  "version": 0.4
+}
