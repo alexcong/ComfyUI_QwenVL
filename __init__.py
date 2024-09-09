@@ -1,4 +1,4 @@
-from .nodes import Qwen2VL
+from .nodes import *
 
 # A dictionary that contains all nodes you want to export with their names
 # NOTE: names should be globally unique

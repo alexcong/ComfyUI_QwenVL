@@ -8,6 +8,7 @@ from transformers import (
 from qwen_vl_utils import process_vision_info
 from PIL import Image, ImageOps
 from torchvision.transforms import ToPILImage
+import folder_paths
 
 class Qwen2VL:
     def __init__(self):
@@ -54,7 +55,7 @@ class Qwen2VL:
             },
         }
 
-    RETURN_TYPES = "STRING"
+    RETURN_TYPES = ("STRING",)
     FUNCTION = "inference"
     CATEGORY = "Comfyui_QwenVL"
 
