@@ -51,7 +51,7 @@ class Qwen2VL:
                 "seed": ("INT", {"default": -1}),  # add seed parameter, default is -1
             },
             "optional": {
-                "image": "IMAGE",
+                "image": ("IMAGE",),
             },
         }
 
