@@ -9,6 +9,7 @@ You can find a sample [workflow](workflow/Qwen2VL.jsonQwen2VL.json) here.
 
 
 ## Installation
+Install from ComfyUI Manager, search for `Qwen2-VL wrapper for ComfyUI`
 
 To install ComfyUI_QwenVL in `ComfyUI\custom_nodes\`, follow these steps:
 
