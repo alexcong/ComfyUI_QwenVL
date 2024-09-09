@@ -2,9 +2,9 @@
 # ComfyUI Qwen2-VL wrapper
 
 ## Sample workflow
-You can find a sample workflow here [Qwen2VL.json](Qwen2VL.json).
+You can find a sample [workflow](workflow/Qwen2VL.jsonQwen2VL.json) here.
 
-![alt text](comfy_workflow.png)
+![alt text](workflow/comfy_workflow.png)
 
 
 
