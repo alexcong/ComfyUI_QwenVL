@@ -121,7 +121,7 @@ class Qwen2VL:
             )
 
         with torch.no_grad():
-            if image:
+            if torch.is_tensor(image):
                 pil_image = tensor_to_pil(image)
                 messages = [
                     {
