@@ -2,6 +2,8 @@ import os
 import torch
 from transformers import (
     Qwen2VLForConditionalGeneration,
+    AutoModelForCausalLM, 
+    AutoTokenizer,
     AutoProcessor,
     BitsAndBytesConfig,
 )
@@ -72,11 +74,11 @@ class Qwen2VL:
         self,
         text,
         model,
+        quantization,
         keep_model_loaded,
         temperature,
         max_new_tokens,
         seed,
-        quantization,
         image=None,
     ):
         if seed != -1:
@@ -155,8 +157,7 @@ class Qwen2VL:
                 videos=video_inputs,
                 padding=True,
                 return_tensors="pt",
-            )
-            inputs = inputs.to("cuda")
+            ).to(self.device)
 
             generated_ids = self.model.generate(**inputs, max_new_tokens=max_new_tokens)
             generated_ids_trimmed = [
@@ -176,6 +177,143 @@ class Qwen2VL:
                 self.processor = None 
                 self.model = None 
                 torch.cuda.empty_cache() 
+                torch.cuda.ipc_collect()
+
+            return result
+
+
+class Qwen2:
+    def __init__(self):
+        self.model_checkpoint = None
+        self.tokenizer = None
+        self.model = None
+        self.device = (
+            torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        )
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "system": (
+                    "STRING",
+                    {
+                        "default": "You are a helpful assistant.",
+                        "multiline": True,
+                    },
+                ),
+                "prompt": ("STRING", {"default": "", "multiline": True}),
+                "model": (
+                    [
+                        "Qwen2.5-3B-Instruct",
+                        "Qwen2.5-7B-Instruct",
+                        "Qwen2.5-14B-Instruct",
+                        "Qwen2.5-32B-Instruct"
+                    ],
+                    {"default": "Qwen2.5-7B-Instruct"},
+                ),
+                "quantization": (
+                    ["none", "4bit", "8bit"],
+                    {"default": "none"},
+                ),  # add quantization type selection
+                "keep_model_loaded": ("BOOLEAN", {"default": False}),
+                "temperature": (
+                    "FLOAT",
+                    {"default": 0.7, "min": 0, "max": 1, "step": 0.1},
+                ),
+                "max_new_tokens": (
+                    "INT",
+                    {"default": 512, "min": 128, "max": 2048, "step": 1},
+                ),
+                "seed": ("INT", {"default": -1}),  # add seed parameter, default is -1
+            },
+        }
+
+    RETURN_TYPES = ("STRING",)
+    FUNCTION = "inference"
+    CATEGORY = "Comfyui_QwenVL"
+
+    def inference(
+        self,
+        system,
+        prompt,
+        model,
+        quantization,
+        keep_model_loaded,
+        temperature,
+        max_new_tokens,
+        seed,
+    ):
+        if seed != -1:
+            torch.manual_seed(seed)
+        model_id = f"qwen/{model}"
+        # put downloaded model to model/LLM dir
+        self.model_checkpoint = os.path.join(
+            folder_paths.models_dir, "LLM", os.path.basename(model_id)
+        )
+
+        if not os.path.exists(self.model_checkpoint):
+            from huggingface_hub import snapshot_download
+
+            snapshot_download(
+                repo_id=model_id,
+                local_dir=self.model_checkpoint,
+                local_dir_use_symlinks=False,
+            )
+
+        if self.tokenizer is None:
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_checkpoint)
+
+        if self.model is None:
+            # Load the model on the available device(s)
+            if quantization == "4bit":
+                quantization_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                )
+            elif quantization == "8bit":
+                quantization_config = BitsAndBytesConfig(
+                    load_in_8bit=True,
+                )
+            else:
+                quantization_config = None
+
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_checkpoint,
+                torch_dtype="auto",
+                device_map="auto",
+                quantization_config=quantization_config,
+            )
+
+        with torch.no_grad():
+            messages = [
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt}
+            ]
+
+            text = self.tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+
+            inputs = self.tokenizer([text], return_tensors="pt").to(self.device)
+
+            generated_ids = self.model.generate(**inputs, max_new_tokens=max_new_tokens)
+            generated_ids_trimmed = [
+                out_ids[len(in_ids) :]
+                for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+            ]
+            result = self.tokenizer.batch_decode(
+                generated_ids_trimmed,
+                skip_special_tokens=True,
+                clean_up_tokenization_spaces=False,
+                temperature=temperature,
+            )
+
+            if not keep_model_loaded:
+                del self.tokenizer
+                del self.model
+                self.tokenizer = None
+                self.model = None
+                torch.cuda.empty_cache()
                 torch.cuda.ipc_collect()
 
             return result

@@ -6,7 +6,8 @@ You can find a sample [workflow](workflow/Qwen2VL.jsonQwen2VL.json) here.
 
 ![alt text](workflow/comfy_workflow.png)
 
-
+Additionally, you can use Qwen2.5 for text generation
+![alt text](workflow/comfy_workflow2.png)
 
 ## Installation
 Install from ComfyUI Manager, search for `Qwen2-VL wrapper for ComfyUI`
