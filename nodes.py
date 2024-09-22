@@ -157,7 +157,7 @@ class Qwen2VL:
                 videos=video_inputs,
                 padding=True,
                 return_tensors="pt",
-            ).to(self.device)
+            ).to("cuda")
 
             generated_ids = self.model.generate(**inputs, max_new_tokens=max_new_tokens)
             generated_ids_trimmed = [
@@ -189,6 +189,10 @@ class Qwen2:
         self.model = None
         self.device = (
             torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        )
+        self.bf16_support = (
+            torch.cuda.is_available()
+            and torch.cuda.get_device_capability(self.device)[0] >= 8
         )
 
     @classmethod
@@ -279,7 +283,7 @@ class Qwen2:
 
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_checkpoint,
-                torch_dtype="auto",
+                torch_dtype=torch.bfloat16 if self.bf16_support else torch.float16,
                 device_map="auto",
                 quantization_config=quantization_config,
             )
@@ -294,7 +298,7 @@ class Qwen2:
                 messages, tokenize=False, add_generation_prompt=True
             )
 
-            inputs = self.tokenizer([text], return_tensors="pt").to(self.device)
+            inputs = self.tokenizer([text], return_tensors="pt").to("cuda")
 
             generated_ids = self.model.generate(**inputs, max_new_tokens=max_new_tokens)
             generated_ids_trimmed = [
