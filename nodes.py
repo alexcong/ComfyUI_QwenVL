@@ -1,3 +1,4 @@
+"""ComfyUI custom nodes for Qwen2.5-VL and Qwen2.5 models."""
 import os
 import torch
 from transformers import (
@@ -13,9 +14,21 @@ import numpy as np
 import folder_paths
 import subprocess
 import uuid
+import tempfile
 
 
 def tensor_to_pil(image_tensor, batch_index=0) -> Image:
+    """
+    Converts an image tensor to a PIL Image object.
+
+    Args:
+        image_tensor (torch.Tensor): The input tensor, expected to be in the
+                                     shape [batch, height, width, channels].
+        batch_index (int): The index of the image in the batch to convert.
+
+    Returns:
+        PIL.Image.Image: The converted PIL Image.
+    """
     # Convert tensor of shape [batch, height, width, channels] at the batch_index to PIL Image
     image_tensor = image_tensor[batch_index].unsqueeze(0)
     i = 255.0 * image_tensor.cpu().numpy()
@@ -24,6 +37,11 @@ def tensor_to_pil(image_tensor, batch_index=0) -> Image:
 
 
 class Qwen2VL:
+    """
+    ComfyUI node for Qwen2.5-VL (Vision-Language) models.
+    This node can process text, image, and optionally video inputs to generate text responses.
+    It handles model loading, preprocessing of inputs, inference, and postprocessing.
+    """
     def __init__(self):
         self.model_checkpoint = None
         self.processor = None
@@ -37,7 +55,11 @@ class Qwen2VL:
         )
 
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
+        """
+        Defines the input types, names, and default values for the ComfyUI node.
+        This method is crucial for ComfyUI to render the node's UI and manage its inputs.
+        """
         return {
             "required": {
                 "text": ("STRING", {"default": "", "multiline": True}),
@@ -86,6 +108,34 @@ class Qwen2VL:
         image=None,
         video_path=None,
     ):
+        """
+        Performs inference using the Qwen2.5-VL model.
+
+        Args:
+            text (str): The primary text prompt for the model.
+            model (str): The specific Qwen2.5-VL model checkpoint to use.
+            quantization (str): The quantization method to apply ("none", "4bit", "8bit").
+            keep_model_loaded (bool): If True, keeps the model loaded in memory after inference.
+            temperature (float): Sampling temperature for generation.
+            max_new_tokens (int): Maximum number of new tokens to generate.
+            seed (int): Random seed for generation (-1 for random).
+            image (torch.Tensor, optional): An image tensor to provide as visual context.
+            video_path (str, optional): Path to a video file to provide as visual context.
+
+        Returns:
+            tuple: A tuple containing a single string, which is either the generated text
+                   response from the model or an error message if inference fails.
+
+        The method handles:
+        1. Model and processor loading (if not already loaded).
+        2. Preprocessing of text, image (if provided), and video (if provided).
+           - Video is processed using ffmpeg to extract frames or represent the video.
+        3. Combining inputs into a format suitable for the Qwen2.5-VL model.
+        4. Running the model inference.
+        5. Postprocessing the generated tokens into a readable string.
+        6. Cleaning up temporary files (e.g., processed video).
+        7. Optionally unloading the model from memory.
+        """
         if seed != -1:
             torch.manual_seed(seed)
 
@@ -150,82 +200,103 @@ class Qwen2VL:
                 }
             ]
 
-            if video_path:
-                print("deal video_path", video_path)
-                # 使用FFmpeg处理视频
-                unique_id = uuid.uuid4().hex  # 生成唯一标识符
-                processed_video_path = f"/tmp/processed_video_{unique_id}.mp4"  # 临时文件路径
-                ffmpeg_command = [
-                    "ffmpeg",
-                    "-i", video_path,
-                    "-vf", "fps=1,scale='min(256,iw)':min'(256,ih)':force_original_aspect_ratio=decrease",
-                    "-c:v", "libx264",
-                    "-preset", "fast",
-                    "-crf", "18",
-                    processed_video_path
-                ]
-                subprocess.run(ffmpeg_command, check=True)
-
-                # 添加处理后的视频信息到消息
-                messages[0]["content"].insert(0, {
-                    "type": "video",
-                    "video": processed_video_path,
-                })
-
-            # 处理图像输入
-            else:
-                print("deal image")
-                pil_image = tensor_to_pil(image)
-                messages[0]["content"].insert(0, {
-                    "type": "image",
-                    "image": pil_image,
-                })
-
-            # 准备输入
-            text = self.processor.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True
-            )
-            print("deal messages", messages)
-            image_inputs, video_inputs = process_vision_info(messages)
-            inputs = self.processor(
-                text=[text],
-                images=image_inputs,
-                videos=video_inputs,
-                padding=True,
-                return_tensors="pt",
-            ).to("cuda")
-
-            # 推理
+            processed_video_path = None  # Initialize
             try:
-                generated_ids = self.model.generate(**inputs, max_new_tokens=max_new_tokens)
+                if video_path:
+                    print("deal video_path", video_path)
+                    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp_video_file:
+                        processed_video_path = tmp_video_file.name
+
+                    ffmpeg_command = [
+                        "ffmpeg",
+                        "-i", video_path,
+                        "-vf", "fps=1,scale='min(256,iw)':min'(256,ih)':force_original_aspect_ratio=decrease",
+                        "-c:v", "libx264",
+                        "-preset", "fast",
+                        "-crf", "18",
+                        processed_video_path
+                    ]
+                    subprocess.run(ffmpeg_command, check=True, capture_output=True, text=True) # Added capture_output and text for better error handling if needed
+
+                    messages[0]["content"].insert(0, {
+                        "type": "video",
+                        "video": processed_video_path,
+                    })
+                elif image is not None: # Ensure image is not None before processing
+                    print("deal image")
+                    pil_image = tensor_to_pil(image)
+                    messages[0]["content"].insert(0, {
+                        "type": "image",
+                        "image": pil_image,
+                    })
+                # If neither video_path nor image is provided, messages[0]["content"] will only contain text.
+
+                text_prompt = self.processor.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=True
+                )
+                print("deal messages", messages) # For debugging
+                image_inputs, video_inputs_processed = process_vision_info(messages) # Renamed to avoid conflict
+
+                model_inputs = self.processor(
+                    text=[text_prompt], # Corrected variable name
+                    images=image_inputs,
+                    videos=video_inputs_processed, # Corrected variable name
+                    padding=True,
+                    return_tensors="pt",
+                ).to("cuda")
+
+                generated_ids = self.model.generate(**model_inputs, max_new_tokens=max_new_tokens)
                 generated_ids_trimmed = [
-                    out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+                    out_ids[len(in_ids):] for in_ids, out_ids in zip(model_inputs.input_ids, generated_ids)
                 ]
                 result = self.processor.batch_decode(
                     generated_ids_trimmed,
                     skip_special_tokens=True,
                     clean_up_tokenization_spaces=False,
-                    temperature=temperature,
+                    # temperature is not a param for batch_decode, it's for generate
                 )
+                # The temperature parameter is typically used in the `generate` method, not `batch_decode`.
+                # If it's intended for `generate`, it should be passed there.
+                # For now, removing from `batch_decode` as it's not a valid arg.
+
+                if not keep_model_loaded:
+                    del self.processor
+                    del self.model
+                    self.processor = None
+                    self.model = None
+                    torch.cuda.empty_cache()
+                    torch.cuda.ipc_collect()
+
+                return result
+
+            except subprocess.CalledProcessError as e:
+                # Specific error handling for ffmpeg failure
+                error_message = f"Error processing video with ffmpeg: {e}\nStderr: {e.stderr}"
+                print(error_message)
+                return (error_message,)
+            except FileNotFoundError:
+                # Specific error handling if ffmpeg is not found
+                error_message = "Error: ffmpeg not found. Please ensure ffmpeg is installed and in your PATH."
+                print(error_message)
+                return (error_message,)
             except Exception as e:
-                return (f"Error during model inference: {str(e)}",)
-
-            if not keep_model_loaded:
-                del self.processor
-                del self.model
-                self.processor = None
-                self.model = None
-                torch.cuda.empty_cache()
-                torch.cuda.ipc_collect()
-
-            # 删除临时视频文件
-            if video_path:
-                os.remove(processed_video_path)
-
-            return result
+                # General error handling for other exceptions during the try block
+                error_message = f"Error during Qwen2VL inference: {str(e)}"
+                print(error_message)
+                return (error_message,)
+            finally:
+                if processed_video_path and os.path.exists(processed_video_path):
+                    os.remove(processed_video_path)
+                    print(f"Cleaned up temporary video file: {processed_video_path}")
 
 
 class Qwen2:
+    """
+    ComfyUI node for Qwen2.5 text generation models.
+    This node takes a system prompt and a user prompt to generate text responses using
+    various Qwen2.5 language model checkpoints. It handles model loading, tokenization,
+    inference, and decoding.
+    """
     def __init__(self):
         self.model_checkpoint = None
         self.tokenizer = None
@@ -239,7 +310,11 @@ class Qwen2:
         )
 
     @classmethod
-    def INPUT_TYPES(s):
+    def INPUT_TYPES(cls):
+        """
+        Defines the input types, names, and default values for the ComfyUI node.
+        This method allows ComfyUI to construct the node's interface and manage its data flow.
+        """
         return {
             "required": {
                 "system": (
@@ -291,6 +366,32 @@ class Qwen2:
         max_new_tokens,
         seed,
     ):
+        """
+        Performs text generation using the specified Qwen2.5 model.
+
+        Args:
+            system (str): The system prompt to guide the model's behavior.
+            prompt (str): The user's prompt for which a response is generated.
+            model (str): The specific Qwen2.5 model checkpoint to use.
+            quantization (str): The quantization method ("none", "4bit", "8bit").
+            keep_model_loaded (bool): Whether to keep the model in memory after inference.
+            temperature (float): Sampling temperature for generation.
+            max_new_tokens (int): Maximum number of new tokens to generate.
+            seed (int): Random seed for generation (-1 for random).
+
+        Returns:
+            tuple: A tuple containing a single string, which is either the generated text
+                   response or an error message if inference fails (e.g., empty prompt).
+
+        The method handles:
+        1. Checking for an empty prompt.
+        2. Model and tokenizer loading (if not already loaded), with support for quantization.
+        3. Applying the chat template to combine system and user prompts.
+        4. Tokenizing the input text.
+        5. Running the model inference to generate token IDs.
+        6. Decoding the generated tokens back into a string.
+        7. Optionally unloading the model and tokenizer from memory.
+        """
         if not prompt.strip():
             return ("Error: Prompt input is empty.",)
 
